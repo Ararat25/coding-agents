@@ -1,0 +1,54 @@
+name: Code Agent Workflow
+
+on:
+  issues:
+    types:
+      - opened
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Repository (owner/repo)'
+        required: true
+      issue_number:
+        description: 'Issue number'
+        required: true
+        type: number
+
+jobs:
+  code-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run Code Agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YANDEX_API_KEY: ${{ secrets.YANDEX_API_KEY }}
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_FOLDER_ID }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER || 'openai' }}
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            coding-agents process-issue \
+              --repo "${{ github.event.inputs.repo }}" \
+              --issue ${{ github.event.inputs.issue_number }}
+          else
+            coding-agents process-issue \
+              --repo "${{ github.repository }}" \
+              --issue ${{ github.event.issue.number }}
+          fi

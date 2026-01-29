@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  coding-agents:
+    build: .
+    container_name: coding-agents
+    restart: unless-stopped
+    ports:
+      - "${WEBHOOK_PORT:-8000}:8000"
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}
+      - GITHUB_APP_INSTALLATION_ID=${GITHUB_APP_INSTALLATION_ID}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - YANDEX_API_KEY=${YANDEX_API_KEY}
+      - YANDEX_FOLDER_ID=${YANDEX_FOLDER_ID}
+      - MAX_ITERATIONS=${MAX_ITERATIONS:-5}
+      - CODE_AGENT_TIMEOUT=${CODE_AGENT_TIMEOUT:-300}
+      - REVIEWER_TIMEOUT=${REVIEWER_TIMEOUT:-180}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - WEBHOOK_PORT=${WEBHOOK_PORT:-8000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./repos:/app/repos
+      - ./.env:/app/.env:ro
+    networks:
+      - coding-agents-network
+
+networks:
+  coding-agents-network:
+    driver: bridge

@@ -1,0 +1,62 @@
+name: Reviewer Workflow
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+  check_suite:
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Repository (owner/repo)'
+        required: true
+      pr_number:
+        description: 'Pull Request number'
+        required: true
+        type: number
+
+jobs:
+  reviewer:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run Reviewer Agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YANDEX_API_KEY: ${{ secrets.YANDEX_API_KEY }}
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_FOLDER_ID }}
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER || 'openai' }}
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            coding-agents reviewer \
+              --repo "${{ github.event.inputs.repo }}" \
+              --pr ${{ github.event.inputs.pr_number }}
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            coding-agents reviewer \
+              --repo "${{ github.repository }}" \
+              --pr ${{ github.event.pull_request.number }} \
+              --wait-ci
+          else
+            # Для check_suite нужно найти связанный PR
+            echo "Check suite completed, skipping (PR review should be triggered by PR event)"
+          fi
