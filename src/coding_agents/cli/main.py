@@ -12,6 +12,7 @@ from coding_agents.infrastructure.llm_client import create_llm_client
 from coding_agents.orchestration.sdlc_orchestrator import SDLCOrchestrator
 from coding_agents.services.code_agent import CodeAgentService
 from coding_agents.services.reviewer_agent import ReviewerAgentService
+from coding_agents.utils import normalize_repo
 
 # Настройка логирования
 logging.basicConfig(
@@ -30,12 +31,17 @@ def main():
 
 
 @main.command()
-@click.option("--repo", required=True, help="Репозиторий в формате owner/repo")
+@click.option(
+    "--repo",
+    required=True,
+    help="Репозиторий: owner/repo или URL (https://github.com/owner/repo)",
+)
 @click.option("--issue", "issue_number", required=True, type=int, help="Номер Issue")
 @click.option("--iteration", "start_iteration", default=1, type=int, help="Начальная итерация")
 def process_issue(repo: str, issue_number: int, start_iteration: int):
     """Обработать Issue полностью (Code Agent + Reviewer + итерации)."""
     try:
+        repo = normalize_repo(repo)
         logger.info("Инициализация компонентов", repo=repo, issue=issue_number)
 
         # Инициализация клиентов
@@ -68,7 +74,11 @@ def process_issue(repo: str, issue_number: int, start_iteration: int):
 
 
 @main.command()
-@click.option("--repo", required=True, help="Репозиторий в формате owner/repo")
+@click.option(
+    "--repo",
+    required=True,
+    help="Репозиторий: owner/repo или URL (https://github.com/owner/repo)",
+)
 @click.option("--issue", "issue_number", required=True, type=int, help="Номер Issue")
 @click.option("--branch", help="Ветка для работы (опционально)")
 @click.option("--pr", "pr_number", type=int, help="Номер PR для обновления (опционально)")
@@ -76,6 +86,7 @@ def process_issue(repo: str, issue_number: int, start_iteration: int):
 def code_agent(repo: str, issue_number: int, branch: str, pr_number: int, iteration: int):
     """Запустить только Code Agent."""
     try:
+        repo = normalize_repo(repo)
         logger.info("Инициализация Code Agent", repo=repo, issue=issue_number)
 
         github_client = GitHubClient()
@@ -108,12 +119,17 @@ def code_agent(repo: str, issue_number: int, branch: str, pr_number: int, iterat
 
 
 @main.command()
-@click.option("--repo", required=True, help="Репозиторий в формате owner/repo")
+@click.option(
+    "--repo",
+    required=True,
+    help="Репозиторий: owner/repo или URL (https://github.com/owner/repo)",
+)
 @click.option("--pr", "pr_number", required=True, type=int, help="Номер Pull Request")
 @click.option("--wait-ci/--no-wait-ci", default=True, help="Ждать завершения CI")
 def reviewer(repo: str, pr_number: int, wait_ci: bool):
     """Запустить только Reviewer Agent."""
     try:
+        repo = normalize_repo(repo)
         logger.info("Инициализация Reviewer Agent", repo=repo, pr=pr_number)
 
         github_client = GitHubClient()

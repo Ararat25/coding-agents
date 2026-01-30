@@ -16,6 +16,7 @@ from coding_agents.infrastructure.llm_client import create_llm_client
 from coding_agents.orchestration.sdlc_orchestrator import SDLCOrchestrator
 from coding_agents.services.code_agent import CodeAgentService
 from coding_agents.services.reviewer_agent import ReviewerAgentService
+from coding_agents.utils import normalize_repo
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +80,12 @@ async def health():
 async def api_process_issue(request: ProcessIssueRequest):
     """API endpoint для обработки Issue."""
     try:
+        repo = normalize_repo(request.repo)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
         result = orchestrator.process_issue(
-            repo=request.repo,
+            repo=repo,
             issue_number=request.issue_number,
             start_iteration=request.start_iteration,
         )
@@ -100,8 +105,12 @@ async def api_process_issue(request: ProcessIssueRequest):
 async def api_code_agent(request: CodeAgentRequest):
     """API endpoint для Code Agent."""
     try:
+        repo = normalize_repo(request.repo)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
         result = code_agent.execute(
-            repo=request.repo,
+            repo=repo,
             issue_number=request.issue_number,
             branch=request.branch,
             pr_number=request.pr_number,
@@ -123,14 +132,18 @@ async def api_code_agent(request: CodeAgentRequest):
 async def api_reviewer(request: ReviewerRequest):
     """API endpoint для Reviewer Agent."""
     try:
+        repo = normalize_repo(request.repo)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
         review_result = reviewer_agent.execute(
-            repo=request.repo,
+            repo=repo,
             pr_number=request.pr_number,
             wait_for_ci=request.wait_for_ci,
         )
 
         # Публикуем review
-        reviewer_agent.publish_review(request.repo, request.pr_number, review_result)
+        reviewer_agent.publish_review(repo, request.pr_number, review_result)
 
         return {
             "success": True,
