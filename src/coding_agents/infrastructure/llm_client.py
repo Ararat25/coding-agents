@@ -5,9 +5,6 @@ import logging
 from typing import Optional
 
 from openai import OpenAI
-import yandexcloud
-from yandex.cloud.ai.foundation_models.v1.foundation_models_service_pb2 import CompletionOptions
-from yandex.cloud.ai.foundation_models.v1.foundation_models_service_pb2_grpc import FoundationModelsServiceStub
 
 from coding_agents.config import LLMProvider, settings
 from coding_agents.domain.interfaces import LLMClientInterface
@@ -106,8 +103,7 @@ class YandexGPTClient(LLMClientInterface):
         if not self.folder_id:
             raise ValueError("YANDEX_FOLDER_ID должен быть установлен")
 
-        # Yandex Cloud SDK инициализация
-        self.sdk = yandexcloud.SDK()
+        # Используем HTTP API YandexGPT
         self.model = "yandexgpt-lite"
 
     def generate(
