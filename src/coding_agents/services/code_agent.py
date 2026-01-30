@@ -33,15 +33,18 @@ class CodeAgentService:
         self.llm_client = llm_client
         self.git_operations = git_operations or GitOperations()
 
-    def execute(self, context: CodeAgentContext, timeout: int = 300) -> AgentExecutionResult:
+    def execute(
+        self,
+        repo: str,
+        issue_number: int,
+        branch: Optional[str] = None,
+        pr_number: Optional[int] = None,
+        previous_feedback: Optional[str] = None,
+        iteration_number: int = 1,
+        timeout: int = 300,
+    ) -> AgentExecutionResult:
         """Выполнить задачу по генерации кода."""
         start_time = time.time()
-        repo = context.repository
-        issue_number = context.issue_number
-        pr_number = context.pr_number
-        iteration_number = context.iteration_number
-        previous_feedback = context.previous_feedback
-        branch = context.branch
 
         try:
             # Получаем данные о задаче
@@ -57,8 +60,6 @@ class CodeAgentService:
             repo_structure = self._get_repository_structure(repo)
             
             # 2. АНАЛИЗ СУЩЕСТВУЮЩЕГО КОДА ДЛЯ КОНКРЕТНОЙ ЗАДАЧИ
-            # Мы просим LLM сначала сказать, какие файлы ей нужно прочитать
-            # Но для упрощения в текущей версии мы сами попробуем найти релевантные файлы
             relevant_files_context = self._get_relevant_files_content(repo, issue.title + " " + issue.body)
             
             full_context = f"{repo_structure}\n\n{relevant_files_context}"
@@ -102,7 +103,6 @@ class CodeAgentService:
                     content = change_data.get("content", "")
                     if change_data["operation"] in ["create", "modify"] and (not content or len(content.strip()) < 10):
                         logger.warning(f"Пропущено подозрительно короткое изменение для {change_data['file_path']}")
-                        # Если это единственный файл, то это ошибка
                         if len(changes_data) == 1:
                             raise ValueError(f"LLM предложил пустое или слишком короткое решение для {change_data['file_path']}")
                         continue
