@@ -135,6 +135,14 @@ class CodeAgentService:
             self.git_operations.push_changes(repo_local_path, branch, token=token)
 
             # Создаём или обновляем PR
+            if not pr_number:
+                # Пытаемся найти существующий PR для этой ветки
+                logger.info(f"Поиск существующего PR для ветки {branch}")
+                existing_pr = self.github_client.get_pr_by_branch(repo, branch)
+                if existing_pr:
+                    pr_number = existing_pr.number
+                    logger.info(f"Найден существующий PR #{pr_number}")
+
             if pr_number:
                 logger.info(f"Обновление PR #{pr_number}")
                 self.github_client.update_pr(repo, pr_number, body=f"**План:** {plan}\n\n**Итерация:** {iteration_number}")
