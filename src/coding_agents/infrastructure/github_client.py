@@ -58,7 +58,10 @@ class GitHubClient(GitHubClientInterface):
         """Получить Pull Request по ветке."""
         try:
             repository = self.github.get_repo(repo)
-            pulls = repository.get_pulls(head=f"{repository.owner.login}:{branch}", state="open")
+            # Пытаемся найти PR по ветке
+            # Формат head для поиска: 'owner:branch'
+            owner = repository.owner.login
+            pulls = repository.get_pulls(head=f"{owner}:{branch}", state="open")
 
             for pr in pulls:
                 if pr.head.ref == branch:
@@ -167,14 +170,13 @@ class GitHubClient(GitHubClientInterface):
 
             review_comments = None
             if comments:
-                review_comments = [
-                    {
+                review_comments = []
+                for c in comments:
+                    review_comments.append({
                         "path": c["file_path"],
                         "position": c.get("line_number", 1),
                         "body": c["comment"],
-                    }
-                    for c in comments
-                ]
+                    })
 
             pr.create_review(body=body, event=event, comments=review_comments)
             logger.info(f"Создан review для PR #{pr_number} в {repo} с вердиктом {event}")
@@ -225,42 +227,6 @@ class GitHubClient(GitHubClientInterface):
             logger.error(f"Ошибка при получении reviews для PR {pr_number} в {repo}: {e}")
             return []
 
-    def get_repository_files(self, repo: str, path: str = "", ref: str = "main") -> List[dict]:
-        """Получить список файлов из репозитория."""
-        try:
-            repository = self.github.get_repo(repo)
-            contents = repository.get_contents(path, ref=ref)
-            
-            files = []
-            if not isinstance(contents, list):
-                contents = [contents]
-            
-            for content in contents:
-                files.append({
-                    "path": content.path,
-                    "type": content.type,
-                    "size": content.size,
-                    "sha": content.sha,
-                })
-            
-            return files
-        except GithubException as e:
-            logger.error(f"Ошибка при получении файлов из {repo}: {e}")
-            return []
-
-    def get_file_content(self, repo: str, file_path: str, ref: str = "main") -> Optional[str]:
-        """Получить содержимое файла."""
-        try:
-            repository = self.github.get_repo(repo)
-            content = repository.get_contents(file_path, ref=ref)
-            
-            if content.type == "file":
-                return content.decoded_content.decode("utf-8")
-            return None
-        except GithubException as e:
-            logger.debug(f"Ошибка при получении файла {file_path} из {repo}: {e}")
-            return None
-
     def get_repository_tree(self, repo: str, ref: str = "main", max_depth: int = 3) -> str:
         """Получить дерево файлов репозитория в виде текста."""
         try:
@@ -301,11 +267,45 @@ class GitHubClient(GitHubClientInterface):
             logger.error(f"Ошибка при получении дерева репозитория {repo}: {e}")
             return ""
 
+    def get_file_content(self, repo: str, file_path: str, ref: str = "main") -> Optional[str]:
+        """Получить содержимое файла."""
+        try:
+            repository = self.github.get_repo(repo)
+            content = repository.get_contents(file_path, ref=ref)
+            
+            if content.type == "file":
+                return content.decoded_content.decode("utf-8")
+            return None
+        except GithubException as e:
+            logger.debug(f"Ошибка при получении файла {file_path} из {repo}: {e}")
+            return None
+
+    def get_repository_files(self, repo: str, path: str = "", ref: str = "main") -> List[dict]:
+        """Получить список файлов из репозитория."""
+        try:
+            repository = self.github.get_repo(repo)
+            contents = repository.get_contents(path, ref=ref)
+            
+            files = []
+            if not isinstance(contents, list):
+                contents = [contents]
+            
+            for content in contents:
+                files.append({
+                    "path": content.path,
+                    "type": content.type,
+                    "size": content.size,
+                    "sha": content.sha,
+                })
+            
+            return files
+        except GithubException as e:
+            logger.error(f"Ошибка при получении файлов из {repo}: {e}")
+            return []
+
     def _pr_to_context(self, pr: PullRequest, repo: str) -> PRContext:
         """Преобразовать PR объект в контекст."""
         try:
-            # Получаем diff
-            diff = pr.diff_url
             # Для получения полного diff нужно сделать отдельный запрос
             files = pr.get_files()
             diff_content = ""
