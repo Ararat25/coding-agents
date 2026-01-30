@@ -67,3 +67,31 @@ OPENAI_BASE_URL=https://api.openai-proxy.com/v1
 | **Зеркало API**      | `OPENAI_BASE_URL=https://.../v1`           | Тот же API с другого домена    |
 
 Рекомендация: в первую очередь попробовать **YandexGPT** (вариант 1).
+
+---
+
+## Если YandexGPT возвращает 403 (Permission denied)
+
+Ошибка вида:
+```text
+Permission to [resource-manager.folder ..., resource-manager.cloud ...] denied
+```
+означает, что у **API-ключа или сервисного аккаунта нет прав** на использование Foundation Models (YandexGPT) в указанном каталоге.
+
+### Что сделать в Yandex Cloud
+
+1. Зайди в [Yandex Cloud Console](https://console.cloud.yandex.ru/).
+2. Выбери **каталог**, ID которого указан в `YANDEX_FOLDER_ID` (в твоей ошибке это `b1grm7pt842k26uoa9ng`).
+3. **Права для API-ключа:**
+   - Если используешь **API-ключ сервисного аккаунта**: зайди в **Service accounts** → выбери сервисный аккаунт, ключ которого в `YANDEX_API_KEY` → вкладка **Roles**. Должна быть роль **`ai.languageModels.user`** на уровне каталога (или облака).
+   - Если такой роли нет: в каталоге открой **Access management** (Управление доступом) → найди нужный сервисный аккаунт (или пользователя) → **Assign role** → выбери роль **AI — Пользователь языковых моделей** (`ai.languageModels.user`).
+4. **Включи Foundation Models для каталога:**
+   - В меню слева: **AI Foundation Models** (или перейди в сервис [Foundation Models](https://yandex.cloud/en/services/foundation-models)).
+   - Убедись, что сервис **подключён для этого каталога** и модель YandexGPT доступна (могут быть ограничения по региону/квоте).
+5. Пересоздай API-ключ при необходимости: Service account → Create API key → скопируй ключ в `YANDEX_API_KEY`.
+
+### Кратко
+
+- **Роль:** у субъекта (сервисный аккаунт или пользователь), от которого создан API-ключ, должна быть **`ai.languageModels.user`** на каталог (или облако).
+- **Каталог:** `YANDEX_FOLDER_ID` должен совпадать с ID каталога, в котором включён Foundation Models и выданы права.
+- После смены прав подожди 1–2 минуты и повтори запрос.

@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 from typing import Optional
 
 import httpx
@@ -12,6 +13,44 @@ from coding_agents.config import LLMProvider, settings
 from coding_agents.domain.interfaces import LLMClientInterface
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_json_from_text(text: str, logger_name: str = "LLM") -> dict:
+    """
+    Извлечь и распарсить JSON из ответа модели (может быть обёрнут в markdown или текст).
+    """
+    if not text or not text.strip():
+        raise ValueError(f"{logger_name}: пустой ответ, JSON не найден")
+
+    raw = text.strip()
+
+    # Прямой парсинг
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    # Извлечь из блока ```json ... ```
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw)
+    if match:
+        try:
+            return json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+
+    # Найти первый { и последний }
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start >= 0 and end > start:
+        try:
+            return json.loads(raw[start:end])
+        except json.JSONDecodeError:
+            pass
+
+    raise ValueError(
+        f"{logger_name}: в ответе не найден валидный JSON. "
+        "Ответ (первые 200 символов): " + raw[:200].replace("\n", " ")
+    )
 
 
 def _make_openai_client() -> OpenAI:
@@ -100,19 +139,10 @@ class OpenAIClient(LLMClientInterface):
                 temperature=0.3,  # Низкая температура для более детерминированного JSON
             )
 
-            content = response.choices[0].message.content
-            return json.loads(content)
-        except json.JSONDecodeError as e:
-            logger.error(f"Ошибка парсинга JSON ответа: {e}")
-            # Пытаемся извлечь JSON из текста
-            try:
-                # Ищем JSON в тексте
-                start = content.find("{")
-                end = content.rfind("}") + 1
-                if start >= 0 and end > start:
-                    return json.loads(content[start:end])
-            except:
-                pass
+            content = response.choices[0].message.content or ""
+            return _parse_json_from_text(content, logger_name="OpenAI")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"Ошибка парсинга JSON ответа OpenAI: {e}")
             raise
         except Exception as e:
             logger.error(f"Ошибка при генерации структурированного ответа OpenAI: {e}")
@@ -190,7 +220,22 @@ class YandexGPTClient(LLMClientInterface):
                 response.raise_for_status()
                 result = response.json()
 
-            return result["result"]["alternatives"][0]["message"]["text"]
+            # Безопасное извлечение текста (структура ответа может отличаться)
+            try:
+                alt = result.get("result", {}).get("alternatives")
+                if alt and len(alt) > 0:
+                    msg = alt[0].get("message", {})
+                    if isinstance(msg, dict):
+                        text = msg.get("text") or msg.get("content")
+                        if isinstance(text, str) and text.strip():
+                            return text.strip()
+            except (IndexError, KeyError, TypeError):
+                pass
+            logger.warning(
+                "YandexGPT вернул пустой или неожиданный ответ. Ключи result: %s",
+                list(result.keys()) if isinstance(result, dict) else type(result),
+            )
+            return ""
         except Exception as e:
             logger.error(f"Ошибка при генерации ответа YandexGPT: {e}")
             raise
@@ -202,34 +247,22 @@ class YandexGPTClient(LLMClientInterface):
         response_format: Optional[dict] = None,
     ) -> dict:
         """Сгенерировать структурированный ответ (JSON)."""
-        try:
-            # Добавляем инструкцию по формату JSON
-            json_instruction = "\n\nОтветь ТОЛЬКО валидным JSON без дополнительного текста."
-            if response_format:
-                json_instruction += f"\nФормат: {json.dumps(response_format, ensure_ascii=False, indent=2)}"
-            prompt_with_format = prompt + json_instruction
+        json_instruction = "\n\nОтветь ТОЛЬКО валидным JSON без дополнительного текста, без markdown и без пояснений."
+        if response_format:
+            json_instruction += f"\nФормат: {json.dumps(response_format, ensure_ascii=False, indent=2)}"
+        prompt_with_format = prompt + json_instruction
 
-            content = self.generate(
-                prompt=prompt_with_format,
-                system_prompt=system_prompt,
-                temperature=0.3,
-            )
+        content = self.generate(
+            prompt=prompt_with_format,
+            system_prompt=system_prompt,
+            temperature=0.3,
+        )
 
-            return json.loads(content)
-        except json.JSONDecodeError as e:
-            logger.error(f"Ошибка парсинга JSON ответа YandexGPT: {e}")
-            # Пытаемся извлечь JSON из текста
-            try:
-                start = content.find("{")
-                end = content.rfind("}") + 1
-                if start >= 0 and end > start:
-                    return json.loads(content[start:end])
-            except:
-                pass
-            raise
-        except Exception as e:
-            logger.error(f"Ошибка при генерации структурированного ответа YandexGPT: {e}")
-            raise
+        if not content or not content.strip():
+            logger.error("YandexGPT вернул пустой ответ в generate_structured")
+            raise ValueError("YandexGPT вернул пустой ответ. Проверьте квоты и права доступа к модели.")
+
+        return _parse_json_from_text(content, logger_name="YandexGPT")
 
 
 def create_llm_client(provider: Optional[LLMProvider] = None) -> LLMClientInterface:
