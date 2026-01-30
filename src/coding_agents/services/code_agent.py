@@ -192,7 +192,10 @@ class CodeAgentService:
     def _prepare_repository(self, repo: str, branch: str) -> str:
         """Подготовить локальный репозиторий."""
         repo_name = repo.split("/")[-1]
-        repo_local_path = os.path.join(settings.work_dir, repo_name)
+        # Используем текущую рабочую директорию, так как work_dir не определен в настройках
+        work_dir = os.path.join(os.getcwd(), "work_dir")
+        os.makedirs(work_dir, exist_ok=True)
+        repo_local_path = os.path.join(work_dir, repo_name)
         
         git_ops = self.git_operations
         token = settings.get_github_token()
