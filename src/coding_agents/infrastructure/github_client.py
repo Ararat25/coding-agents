@@ -225,6 +225,82 @@ class GitHubClient(GitHubClientInterface):
             logger.error(f"Ошибка при получении reviews для PR {pr_number} в {repo}: {e}")
             return []
 
+    def get_repository_files(self, repo: str, path: str = "", ref: str = "main") -> List[dict]:
+        """Получить список файлов из репозитория."""
+        try:
+            repository = self.github.get_repo(repo)
+            contents = repository.get_contents(path, ref=ref)
+            
+            files = []
+            if not isinstance(contents, list):
+                contents = [contents]
+            
+            for content in contents:
+                files.append({
+                    "path": content.path,
+                    "type": content.type,
+                    "size": content.size,
+                    "sha": content.sha,
+                })
+            
+            return files
+        except GithubException as e:
+            logger.error(f"Ошибка при получении файлов из {repo}: {e}")
+            return []
+
+    def get_file_content(self, repo: str, file_path: str, ref: str = "main") -> Optional[str]:
+        """Получить содержимое файла."""
+        try:
+            repository = self.github.get_repo(repo)
+            content = repository.get_contents(file_path, ref=ref)
+            
+            if content.type == "file":
+                return content.decoded_content.decode("utf-8")
+            return None
+        except GithubException as e:
+            logger.debug(f"Ошибка при получении файла {file_path} из {repo}: {e}")
+            return None
+
+    def get_repository_tree(self, repo: str, ref: str = "main", max_depth: int = 3) -> str:
+        """Получить дерево файлов репозитория в виде текста."""
+        try:
+            repository = self.github.get_repo(repo)
+            
+            def build_tree(path: str = "", depth: int = 0, prefix: str = "") -> List[str]:
+                if depth > max_depth:
+                    return []
+                
+                lines = []
+                try:
+                    contents = repository.get_contents(path, ref=ref)
+                    if not isinstance(contents, list):
+                        contents = [contents]
+                    
+                    # Фильтруем служебные директории
+                    contents = [c for c in contents if not c.name.startswith(".") and c.name not in ["node_modules", "__pycache__", "venv", "dist", "build"]]
+                    
+                    for i, content in enumerate(contents):
+                        is_last = i == len(contents) - 1
+                        connector = "└── " if is_last else "├── "
+                        
+                        if content.type == "dir":
+                            lines.append(f"{prefix}{connector}{content.name}/")
+                            extension = "    " if is_last else "│   "
+                            lines.extend(build_tree(content.path, depth + 1, prefix + extension))
+                        else:
+                            lines.append(f"{prefix}{connector}{content.name}")
+                except Exception as e:
+                    logger.debug(f"Ошибка при получении содержимого {path}: {e}")
+                
+                return lines
+            
+            tree_lines = [f"{repo}/"]
+            tree_lines.extend(build_tree())
+            return "\n".join(tree_lines)
+        except GithubException as e:
+            logger.error(f"Ошибка при получении дерева репозитория {repo}: {e}")
+            return ""
+
     def _pr_to_context(self, pr: PullRequest, repo: str) -> PRContext:
         """Преобразовать PR объект в контекст."""
         try:

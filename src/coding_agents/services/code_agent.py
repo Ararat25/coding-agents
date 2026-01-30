@@ -201,10 +201,81 @@ class CodeAgentService:
         return repo_local_path
 
     def _get_repository_structure(self, repo: str) -> Optional[str]:
-        """Получить структуру репозитория (опционально, для контекста)."""
+        """Получить структуру репозитория и важные файлы."""
         try:
-            # Можно использовать GitHub API для получения структуры
-            # Но для простоты возвращаем None - LLM может работать и без этого
+            logger.info(f"Получение структуры репозитория {repo}")
+            
+            # Получаем дерево файлов
+            tree = self.github_client.get_repository_tree(repo, max_depth=3)
+            
+            if not tree:
+                return None
+            
+            context_parts = ["## Структура репозитория", tree, ""]
+            
+            # Получаем содержимое важных файлов
+            important_files = [
+                "README.md",
+                "CONTRIBUTING.md",
+                "ARCHITECTURE.md",
+                "pyproject.toml",
+                "package.json",
+                "requirements.txt",
+                "setup.py",
+                ".env.example",
+            ]
+            
+            context_parts.append("## Важные файлы и документация")
+            
+            for file_path in important_files:
+                content = self.github_client.get_file_content(repo, file_path)
+                if content:
+                    # Ограничиваем размер файла для контекста
+                    if len(content) > 5000:
+                        content = content[:5000] + "\n... (файл обрезан)"
+                    context_parts.append(f"\n### {file_path}\n```\n{content}\n```")
+            
+            # Получаем содержимое ключевых Python файлов
+            python_files = self._find_key_python_files(repo)
+            if python_files:
+                context_parts.append("\n## Ключевые файлы кода")
+                for file_path in python_files[:10]:  # Ограничиваем 10 файлами
+                    content = self.github_client.get_file_content(repo, file_path)
+                    if content:
+                        if len(content) > 3000:
+                            content = content[:3000] + "\n... (файл обрезан)"
+                        context_parts.append(f"\n### {file_path}\n```python\n{content}\n```")
+            
+            return "\n".join(context_parts)
+            
+        except Exception as e:
+            logger.warning(f"Ошибка при получении структуры репозитория: {e}")
             return None
-        except Exception:
-            return None
+    
+    def _find_key_python_files(self, repo: str) -> List[str]:
+        """Найти ключевые Python файлы в репозитории."""
+        try:
+            key_files = []
+            
+            # Проверяем типичные пути
+            common_paths = [
+                "main.py",
+                "app.py",
+                "__init__.py",
+                "src/__init__.py",
+                "src/main.py",
+                "src/app.py",
+                "api/server.py",
+                "src/api/server.py",
+            ]
+            
+            for path in common_paths:
+                content = self.github_client.get_file_content(repo, path)
+                if content:
+                    key_files.append(path)
+            
+            return key_files
+            
+        except Exception as e:
+            logger.debug(f"Ошибка при поиске Python файлов: {e}")
+            return []

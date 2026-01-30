@@ -79,6 +79,21 @@ class GitHubClientInterface(ABC):
         """Получить список reviews для PR."""
         pass
 
+    @abstractmethod
+    def get_repository_tree(self, repo: str, ref: str = "main", max_depth: int = 3) -> str:
+        """Получить дерево файлов репозитория."""
+        pass
+
+    @abstractmethod
+    def get_file_content(self, repo: str, file_path: str, ref: str = "main") -> Optional[str]:
+        """Получить содержимое файла."""
+        pass
+
+    @abstractmethod
+    def get_repository_files(self, repo: str, path: str = "", ref: str = "main") -> List[dict]:
+        """Получить список файлов из репозитория."""
+        pass
+
 
 class LLMClientInterface(ABC):
     """Интерфейс для работы с LLM."""

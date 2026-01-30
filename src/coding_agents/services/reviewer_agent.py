@@ -151,7 +151,18 @@ class ReviewerAgentService:
         """Опубликовать результаты review в PR."""
         try:
             # Формируем тело review
-            body_parts = [review_result.summary]
+            body_parts = []
+            
+            # Добавляем заголовок с вердиктом
+            if review_result.verdict == ReviewVerdict.APPROVED:
+                body_parts.append("✅ **Код готов к approve**")
+                body_parts.append("\nАвтоматическая проверка завершена успешно. Ожидается окончательный approve от человека.\n")
+            elif review_result.verdict == ReviewVerdict.CHANGES_REQUESTED:
+                body_parts.append("❌ **Требуются изменения**\n")
+            else:
+                body_parts.append("💬 **Комментарий к review**\n")
+            
+            body_parts.append(review_result.summary)
 
             if review_result.general_feedback:
                 body_parts.append(f"\n**Общий фидбек:**\n{review_result.general_feedback}")
@@ -168,11 +179,12 @@ class ReviewerAgentService:
             body = "\n".join(body_parts)
 
             # Определяем event для GitHub
+            # Агент НЕ может делать APPROVE (GitHub API запрещает approve своего PR)
+            # Только человек может сделать окончательный approve
             event = "COMMENT"
-            if review_result.verdict == ReviewVerdict.APPROVED:
-                event = "APPROVE"
-            elif review_result.verdict == ReviewVerdict.CHANGES_REQUESTED:
+            if review_result.verdict == ReviewVerdict.CHANGES_REQUESTED:
                 event = "REQUEST_CHANGES"
+            # Для APPROVED используем COMMENT с положительным сообщением
 
             # Формируем комментарии для review (line comments)
             review_comments = []
