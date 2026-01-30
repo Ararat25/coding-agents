@@ -129,7 +129,7 @@ class YandexGPTClient(LLMClientInterface):
         if not self.folder_id:
             raise ValueError("YANDEX_FOLDER_ID должен быть установлен")
 
-        # Используем HTTP API YandexGPT
+        # Используем HTTP API YandexGPT (modelUri: gpt://folder_id/модель/latest)
         self.model = "yandexgpt-lite"
 
     def generate(
@@ -148,25 +148,45 @@ class YandexGPTClient(LLMClientInterface):
             headers = {
                 "Authorization": f"Api-Key {self.api_key}",
                 "x-folder-id": self.folder_id,
+                "Content-Type": "application/json",
             }
+
+            # Yandex API: только role "user" и "assistant"; system объединяем с первым user
+            max_tokens_val = max_tokens or 4000
+            if isinstance(max_tokens_val, str):
+                max_tokens_val = int(max_tokens_val, 10)
 
             messages = []
             if system_prompt:
-                messages.append({"role": "system", "text": system_prompt})
-            messages.append({"role": "user", "text": prompt})
+                messages.append({
+                    "role": "user",
+                    "text": f"Системная инструкция:\n{system_prompt}\n\nЗапрос пользователя:\n{prompt}",
+                })
+            else:
+                messages.append({"role": "user", "text": prompt})
 
             payload = {
-                "modelUri": f"gpt://{self.folder_id}/{self.model}",
+                "modelUri": f"gpt://{self.folder_id}/{self.model}/latest",
                 "completionOptions": {
                     "stream": False,
                     "temperature": temperature,
-                    "maxTokens": str(max_tokens or 4000),
+                    "maxTokens": max_tokens_val,
                 },
                 "messages": messages,
             }
 
             with httpx.Client() as client:
                 response = client.post(url, json=payload, headers=headers, timeout=60)
+                if response.status_code != 200:
+                    try:
+                        err_body = response.text[:500]
+                    except Exception:
+                        err_body = ""
+                    logger.error(
+                        "YandexGPT API ошибка %s: %s",
+                        response.status_code,
+                        err_body,
+                    )
                 response.raise_for_status()
                 result = response.json()
 
