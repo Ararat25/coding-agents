@@ -38,6 +38,19 @@
        └─► CHANGES_REQUESTED ──► Code Agent (итерация)
 ```
 
+## Как быстро начать
+
+**Подробная пошаговая инструкция:** [docs/ИНСТРУКЦИЯ_ЗАПУСКА_И_ИСПОЛЬЗОВАНИЯ.md](docs/ИНСТРУКЦИЯ_ЗАПУСКА_И_ИСПОЛЬЗОВАНИЯ.md)
+
+Кратко:
+1. Создай `.env` в корне проекта с `GITHUB_TOKEN` и `OPENAI_API_KEY`.
+2. Запусти: `docker-compose build --no-cache && docker-compose up -d`.
+3. Вызови API: `POST http://localhost:8000/api/process-issue` с телом:
+   ```json
+   {"repo": "владелец/имя-репо", "issue_number": 42, "start_iteration": 1}
+   ```
+   Репозиторий и Issue с этим номером должны существовать в GitHub; токен должен иметь доступ к репо.
+
 ## Требования
 
 - Python 3.11+
