@@ -10,14 +10,15 @@ Review Can not approve your own pull request
 
 ### Решение
 1. **Изменен файл `src/coding_agents/services/reviewer_agent.py`:**
-   - Убрана возможность агента делать APPROVE
-   - Теперь агент использует только `COMMENT` и `REQUEST_CHANGES`
+   - Убрана возможность агента делать `APPROVE` и `REQUEST_CHANGES`
+   - Теперь агент использует **только** `COMMENT` для всех типов review
+   - Это необходимо, так как GitHub API запрещает автору PR (агенту) одобрять или запрашивать изменения в своем собственном PR
    - Для случая когда код готов к approve, агент оставляет `COMMENT` с явным указанием "✅ Код готов к approve"
    - Добавлено сообщение что ожидается окончательный approve от человека
 
 2. **Логика работы:**
-   - `CHANGES_REQUESTED` → агент публикует review с `REQUEST_CHANGES`
-   - `APPROVED` → агент публикует review с `COMMENT` и явным указанием что код готов
+   - `CHANGES_REQUESTED` → агент публикует review как `COMMENT` с детальным описанием необходимых правок
+   - `APPROVED` → агент публикует review как `COMMENT` и явным указанием что код готов
    - `COMMENT` → агент публикует обычный комментарий
    - Окончательный approve делает только человек
 

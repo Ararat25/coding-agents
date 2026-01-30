@@ -179,12 +179,9 @@ class ReviewerAgentService:
             body = "\n".join(body_parts)
 
             # Определяем event для GitHub
-            # Агент НЕ может делать APPROVE (GitHub API запрещает approve своего PR)
-            # Только человек может сделать окончательный approve
+            # Агент НЕ может делать APPROVE или REQUEST_CHANGES своего собственного PR
+            # GitHub API запрещает это. Мы используем COMMENT для всех случаев.
             event = "COMMENT"
-            if review_result.verdict == ReviewVerdict.CHANGES_REQUESTED:
-                event = "REQUEST_CHANGES"
-            # Для APPROVED используем COMMENT с положительным сообщением
 
             # Формируем комментарии для review (line comments)
             review_comments = []
