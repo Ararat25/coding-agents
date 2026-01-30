@@ -4,7 +4,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from coding_agents.config import settings
 from coding_agents.domain.interfaces import GitHubClientInterface, GitOperationsInterface, LLMClientInterface
