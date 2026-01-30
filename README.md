@@ -101,6 +101,8 @@ docker-compose up -d
 - `OPENAI_API_KEY` - ключ OpenAI (если используется OpenAI)
 - `YANDEX_API_KEY` - ключ YandexGPT (если используется YandexGPT)
 - `YANDEX_FOLDER_ID` - ID папки Yandex Cloud
+- `OPENAI_BASE_URL` - альтернативный URL API (обход гео-ограничений), см. [docs/ОБХОД_ГЕО_ОГРАНИЧЕНИЙ_OPENAI.md](docs/ОБХОД_ГЕО_ОГРАНИЧЕНИЙ_OPENAI.md)
+- `HTTP_PROXY` / `HTTPS_PROXY` - прокси для исходящих запросов (обход гео)
 - `MAX_ITERATIONS` - максимальное количество итераций (по умолчанию: 5)
 - `WEBHOOK_SECRET` - секрет для проверки подписи webhook (опционально)
 - `WEBHOOK_PORT` - порт для API/webhook (по умолчанию: 8000)

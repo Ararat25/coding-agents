@@ -2,8 +2,10 @@
 
 import json
 import logging
+import os
 from typing import Optional
 
+import httpx
 from openai import OpenAI
 
 from coding_agents.config import LLMProvider, settings
@@ -12,13 +14,37 @@ from coding_agents.domain.interfaces import LLMClientInterface
 logger = logging.getLogger(__name__)
 
 
+def _make_openai_client() -> OpenAI:
+    """Создать клиент OpenAI с опциональным base_url и прокси (обход гео-ограничений)."""
+    api_key = settings.get_llm_api_key()
+    base_url = (
+        (settings.openai_base_url or "").strip()
+        or os.environ.get("OPENAI_BASE_URL", "").strip()
+    )
+    proxy = (
+        (settings.http_proxy or "").strip()
+        or os.environ.get("HTTPS_PROXY", "").strip()
+        or os.environ.get("HTTP_PROXY", "").strip()
+    )
+
+    kwargs = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url.rstrip("/")
+        logger.info("OpenAI: используется кастомный base_url (прокси/зеркало)")
+    if proxy:
+        kwargs["http_client"] = httpx.Client(proxy=proxy, timeout=60.0)
+        logger.info("OpenAI: запросы идут через прокси")
+
+    return OpenAI(**kwargs)
+
+
 class OpenAIClient(LLMClientInterface):
     """Клиент для OpenAI API."""
 
     def __init__(self, api_key: Optional[str] = None):
         """Инициализация клиента."""
         self.api_key = api_key or settings.get_llm_api_key()
-        self.client = OpenAI(api_key=self.api_key)
+        self.client = _make_openai_client()
         self.model = "gpt-4o-mini"
 
     def generate(

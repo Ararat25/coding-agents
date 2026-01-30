@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
@@ -20,8 +21,6 @@ from coding_agents.utils import normalize_repo
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Coding Agents API", version="0.1.0")
-
 # Глобальные сервисы (инициализируются при старте)
 github_client: Optional[GitHubClient] = None
 code_agent: Optional[CodeAgentService] = None
@@ -29,11 +28,10 @@ reviewer_agent: Optional[ReviewerAgentService] = None
 orchestrator: Optional[SDLCOrchestrator] = None
 
 
-@app.on_event("startup")
-async def startup():
-    """Инициализация сервисов при старте."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Инициализация и завершение сервисов."""
     global github_client, code_agent, reviewer_agent, orchestrator
-
     logger.info("Инициализация сервисов")
     github_client = GitHubClient()
     llm_client = create_llm_client()
@@ -41,6 +39,11 @@ async def startup():
     reviewer_agent = ReviewerAgentService(github_client, llm_client)
     orchestrator = SDLCOrchestrator(github_client, code_agent, reviewer_agent)
     logger.info("Сервисы инициализированы")
+    yield
+    # shutdown при необходимости
+
+
+app = FastAPI(title="Coding Agents API", version="0.1.0", lifespan=lifespan)
 
 
 # Pydantic модели для запросов

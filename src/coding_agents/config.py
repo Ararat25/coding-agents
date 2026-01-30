@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # LLM Configuration
     llm_provider: LLMProvider = LLMProvider.OPENAI
     openai_api_key: Optional[str] = None
+    openai_base_url: Optional[str] = None  # Прокси/зеркало API (обход гео-ограничений)
+    http_proxy: Optional[str] = None  # Прокси для исходящих запросов (например https://proxy:port)
     yandex_api_key: Optional[str] = None
     yandex_folder_id: Optional[str] = None
 
