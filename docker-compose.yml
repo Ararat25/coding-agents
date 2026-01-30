@@ -27,7 +27,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ./repos:/app/repos
-      - ./.env:/app/.env:ro
+      - ./:/app
     networks:
       - coding-agents-network
 

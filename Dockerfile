@@ -12,9 +12,8 @@ COPY pyproject.toml ./
 COPY requirements.txt ./
 
 # Установка зависимостей Python
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -e .
+RUN pip install -r requirements.txt && \
+    pip install -e .
 
 # Копирование исходного кода
 COPY src/ ./src/

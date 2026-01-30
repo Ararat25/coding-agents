@@ -10,7 +10,7 @@ install-dev:
 	pip install -e ".[dev]"
 
 test:
-	pytest
+	 python -m unittest discover tests/unit/
 
 lint:
 	ruff check .

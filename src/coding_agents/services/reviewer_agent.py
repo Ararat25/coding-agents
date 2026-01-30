@@ -152,7 +152,7 @@ class ReviewerAgentService:
         try:
             # Формируем тело review
             body_parts = []
-            
+
             # Добавляем заголовок с вердиктом
             if review_result.verdict == ReviewVerdict.APPROVED:
                 body_parts.append("✅ **Код готов к approve**")
@@ -161,7 +161,7 @@ class ReviewerAgentService:
                 body_parts.append("❌ **Требуются изменения**\n")
             else:
                 body_parts.append("💬 **Комментарий к review**\n")
-            
+
             body_parts.append(review_result.summary)
 
             if review_result.general_feedback:
