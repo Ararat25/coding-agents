@@ -1,4 +1,4 @@
-"""Code Agent - сервис для генерации кода на основе Issue."""
+"""Сервис Code Agent для генерации и применения изменений кода."""
 
 import logging
 import os
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class CodeAgentService:
-    """Сервис Code Agent."""
+    """Сервис для автоматической генерации кода."""
 
     def __init__(
         self,
@@ -33,21 +33,18 @@ class CodeAgentService:
         self.llm_client = llm_client
         self.git_operations = git_operations or GitOperations()
 
-    def execute(
-        self,
-        repo: str,
-        issue_number: int,
-        branch: Optional[str] = None,
-        pr_number: Optional[int] = None,
-        previous_feedback: Optional[str] = None,
-        iteration_number: int = 1,
-    ) -> AgentExecutionResult:
-        """Выполнить задачу Code Agent."""
+    def execute(self, context: CodeAgentContext, timeout: int = 300) -> AgentExecutionResult:
+        """Выполнить задачу по генерации кода."""
         start_time = time.time()
-        timeout = settings.code_agent_timeout
+        repo = context.repository
+        issue_number = context.issue_number
+        pr_number = context.pr_number
+        iteration_number = context.iteration_number
+        previous_feedback = context.previous_feedback
+        branch = context.branch
 
         try:
-            # Получаем Issue
+            # Получаем данные о задаче
             logger.info(f"Получение Issue #{issue_number} из {repo}")
             issue = self.github_client.get_issue(repo, issue_number)
 
@@ -55,15 +52,23 @@ class CodeAgentService:
             if not branch:
                 branch = f"issue-{issue_number}-iter-{iteration_number}"
 
-            # Получаем структуру репозитория (опционально)
+            # 1. ГЛУБОКИЙ АНАЛИЗ КОНТЕКСТА
+            # Сначала получаем структуру, чтобы понять где искать код
             repo_structure = self._get_repository_structure(repo)
+            
+            # 2. АНАЛИЗ СУЩЕСТВУЮЩЕГО КОДА ДЛЯ КОНКРЕТНОЙ ЗАДАЧИ
+            # Мы просим LLM сначала сказать, какие файлы ей нужно прочитать
+            # Но для упрощения в текущей версии мы сами попробуем найти релевантные файлы
+            relevant_files_context = self._get_relevant_files_content(repo, issue.title + " " + issue.body)
+            
+            full_context = f"{repo_structure}\n\n{relevant_files_context}"
 
             # Формируем промпт
             system_prompt = get_code_agent_system_prompt()
             user_prompt = get_code_agent_user_prompt(
                 issue_title=issue.title,
                 issue_body=issue.body,
-                repository_structure=repo_structure,
+                repository_structure=full_context,
                 previous_feedback=previous_feedback,
                 iteration_number=iteration_number,
             )
@@ -93,23 +98,32 @@ class CodeAgentService:
             changes = []
             for change_data in changes_data:
                 try:
+                    # Валидация: предотвращаем пустой контент
+                    content = change_data.get("content", "")
+                    if change_data["operation"] in ["create", "modify"] and (not content or len(content.strip()) < 10):
+                        logger.warning(f"Пропущено подозрительно короткое изменение для {change_data['file_path']}")
+                        # Если это единственный файл, то это ошибка
+                        if len(changes_data) == 1:
+                            raise ValueError(f"LLM предложил пустое или слишком короткое решение для {change_data['file_path']}")
+                        continue
+
                     change = CodeChange(
                         file_path=change_data["file_path"],
                         operation=change_data["operation"],
-                        content=change_data.get("content"),
+                        content=content,
                         old_content=change_data.get("old_content"),
                         line_start=change_data.get("line_start"),
                         line_end=change_data.get("line_end"),
                     )
                     changes.append(change)
-                except KeyError as e:
-                    logger.warning(f"Пропущено некорректное изменение: {e}")
+                except (KeyError, ValueError) as e:
+                    logger.warning(f"Ошибка в данных изменения: {e}")
                     continue
 
             if not changes:
                 return AgentExecutionResult(
                     success=False,
-                    message="LLM не вернул изменений для применения",
+                    message="LLM не вернул валидных изменений кода. Пожалуйста, уточните задачу.",
                 )
 
             logger.info(f"Получено {len(changes)} изменений от LLM")
@@ -136,7 +150,6 @@ class CodeAgentService:
 
             # Создаём или обновляем PR
             if not pr_number:
-                # Пытаемся найти существующий PR для этой ветки
                 logger.info(f"Поиск существующего PR для ветки {branch}")
                 existing_pr = self.github_client.get_pr_by_branch(repo, branch)
                 if existing_pr:
@@ -168,122 +181,117 @@ class CodeAgentService:
             )
 
         except Exception as e:
-            logger.error(f"Ошибка выполнения Code Agent: {e}", exc_info=True)
+            logger.error(f"Ошибка выполнения Code Agent: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return AgentExecutionResult(
                 success=False,
                 message=f"Ошибка: {str(e)}",
             )
 
     def _prepare_repository(self, repo: str, branch: str) -> str:
-        """Подготовить локальный клон репозитория."""
-        from pathlib import Path
-
-        # Формируем путь для локального клона
-        repo_name = repo.replace("/", "_")
-        repo_local_path = f"{repo_name}"
-
-        repo_url = f"https://github.com/{repo}.git"
-        token = settings.get_github_token()
-
-        # Проверяем существует ли уже клон
+        """Подготовить локальный репозиторий."""
+        repo_name = repo.split("/")[-1]
+        repo_local_path = os.path.join(settings.work_dir, repo_name)
+        
         git_ops = self.git_operations
-        base_path = Path(git_ops.base_repos_dir) / repo_local_path
-
-        if not base_path.exists():
-            # Клонируем
-            logger.info(f"Клонирование репозитория {repo} в {repo_local_path}")
-            git_ops.clone_repository(repo_url, repo_local_path, token)
-
-        # Переключаемся на нужную ветку или создаём новую
+        token = settings.get_github_token()
+        
+        # Клонируем если нет
+        if not os.path.exists(repo_local_path):
+            logger.info(f"Клонирование репозитория {repo}")
+            repo_url = f"https://github.com/{repo}.git"
+            git_ops.clone_repository(repo_url, repo_local_path, token=token)
+        
+        # Переключаемся на ветку
         try:
+            logger.info(f"Переключение на ветку {branch}")
             git_ops.checkout_branch(repo_local_path, branch, create=True)
         except Exception as e:
             logger.debug(f"Ветка {branch} уже существует или ошибка: {e}")
-            # Ветка уже существует, переключаемся
             try:
                 git_ops.checkout_branch(repo_local_path, branch, create=False)
             except Exception:
-                # Если не получилось, создаём заново
                 git_ops.checkout_branch(repo_local_path, branch, create=True)
 
         return repo_local_path
 
-    def _get_repository_structure(self, repo: str) -> Optional[str]:
+    def _get_repository_structure(self, repo: str) -> str:
         """Получить структуру репозитория и важные файлы."""
         try:
             logger.info(f"Получение структуры репозитория {repo}")
-            
-            # Получаем дерево файлов
             tree = self.github_client.get_repository_tree(repo, max_depth=3)
-            
             if not tree:
-                return None
+                return "Структура репозитория недоступна."
             
-            context_parts = ["## Структура репозитория", tree, ""]
+            context_parts = ["## СТРУКТУРА ПРОЕКТА", tree, ""]
             
-            # Получаем содержимое важных файлов
-            important_files = [
-                "README.md",
-                "CONTRIBUTING.md",
-                "ARCHITECTURE.md",
-                "pyproject.toml",
-                "package.json",
-                "requirements.txt",
-                "setup.py",
-                ".env.example",
-            ]
-            
-            context_parts.append("## Важные файлы и документация")
-            
-            for file_path in important_files:
+            # Конфигурационные файлы
+            config_files = ["pyproject.toml", "requirements.txt", "package.json", "setup.py", "README.md"]
+            for file_path in config_files:
                 content = self.github_client.get_file_content(repo, file_path)
                 if content:
-                    # Ограничиваем размер файла для контекста
-                    if len(content) > 5000:
-                        content = content[:5000] + "\n... (файл обрезан)"
-                    context_parts.append(f"\n### {file_path}\n```\n{content}\n```")
-            
-            # Получаем содержимое ключевых Python файлов
-            python_files = self._find_key_python_files(repo)
-            if python_files:
-                context_parts.append("\n## Ключевые файлы кода")
-                for file_path in python_files[:10]:  # Ограничиваем 10 файлами
-                    content = self.github_client.get_file_content(repo, file_path)
-                    if content:
-                        if len(content) > 3000:
-                            content = content[:3000] + "\n... (файл обрезан)"
-                        context_parts.append(f"\n### {file_path}\n```python\n{content}\n```")
+                    context_parts.append(f"### Файл: {file_path}\n```\n{content[:2000]}\n```")
             
             return "\n".join(context_parts)
-            
         except Exception as e:
-            logger.warning(f"Ошибка при получении структуры репозитория: {e}")
-            return None
-    
-    def _find_key_python_files(self, repo: str) -> List[str]:
-        """Найти ключевые Python файлы в репозитории."""
+            logger.warning(f"Ошибка при получении структуры: {e}")
+            return "Ошибка при получении структуры проекта."
+
+    def _get_relevant_files_content(self, repo: str, query: str) -> str:
+        """Найти и прочитать файлы, релевантные задаче."""
         try:
-            key_files = []
+            context_parts = ["## СУЩЕСТВУЮЩИЙ КОД ДЛЯ АНАЛИЗА"]
             
-            # Проверяем типичные пути
-            common_paths = [
-                "main.py",
-                "app.py",
-                "__init__.py",
-                "src/__init__.py",
-                "src/main.py",
-                "src/app.py",
-                "api/server.py",
-                "src/api/server.py",
-            ]
+            # 1. Находим все файлы (плоский список)
+            all_files = self._get_all_files_recursive(repo)
             
-            for path in common_paths:
+            # 2. Простая эвристика поиска релевантных файлов по ключевым словам из задачи
+            keywords = query.lower().split()
+            relevant_paths = []
+            
+            for path in all_files:
+                path_lower = path.lower()
+                # Игнорируем тесты при поиске исходников (если только задача не про тесты)
+                if "test" in query.lower() or "тест" in query.lower():
+                    pass # Если ищем тесты, то не игнорируем
+                elif "test" in path_lower:
+                    continue
+                    
+                if any(kw in path_lower for kw in keywords if len(kw) > 3):
+                    relevant_paths.append(path)
+            
+            # 3. Если ничего не нашли, берем "главные" файлы
+            if not relevant_paths:
+                main_candidates = ["main.py", "app.py", "src/main.py", "src/app.py", "api/server.py"]
+                relevant_paths = [p for p in main_candidates if p in all_files]
+
+            # 4. Читаем содержимое (макс 5 файлов)
+            for path in relevant_paths[:7]:
                 content = self.github_client.get_file_content(repo, path)
                 if content:
-                    key_files.append(path)
+                    context_parts.append(f"### Файл: {path}\n```python\n{content[:4000]}\n```")
             
-            return key_files
-            
+            if len(context_parts) == 1:
+                return "Релевантный код не найден. Пожалуйста, создай новые файлы согласно архитектуре."
+                
+            return "\n".join(context_parts)
         except Exception as e:
-            logger.debug(f"Ошибка при поиске Python файлов: {e}")
-            return []
+            logger.warning(f"Ошибка при поиске релевантных файлов: {e}")
+            return ""
+
+    def _get_all_files_recursive(self, repo: str, path: str = "", depth: int = 0) -> List[str]:
+        """Рекурсивно получить список всех файлов."""
+        if depth > 3: return []
+        files = []
+        try:
+            items = self.github_client.get_repository_files(repo, path)
+            for item in items:
+                if item["type"] == "dir":
+                    if item["path"].split("/")[-1] not in [".git", "__pycache__", "venv", "node_modules"]:
+                        files.extend(self._get_all_files_recursive(repo, item["path"], depth + 1))
+                else:
+                    files.append(item["path"])
+        except Exception:
+            pass
+        return files
