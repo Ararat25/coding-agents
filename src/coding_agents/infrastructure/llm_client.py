@@ -15,14 +15,59 @@ from coding_agents.domain.interfaces import LLMClientInterface
 logger = logging.getLogger(__name__)
 
 
+def _extract_balanced_brace_json(s: str, start: int) -> Optional[str]:
+    """Найти подстроку от start до парной закрывающей } (учитывая вложенность)."""
+    if start < 0 or start >= len(s) or s[start] != "{":
+        return None
+    depth = 0
+    i = start
+    in_string = False
+    escape = False
+    quote_char = None
+    while i < len(s):
+        c = s[i]
+        if escape:
+            escape = False
+            i += 1
+            continue
+        if c == "\\" and in_string:
+            escape = True
+            i += 1
+            continue
+        if in_string:
+            if c == quote_char:
+                in_string = False
+            i += 1
+            continue
+        if c in ('"', "'"):
+            in_string = True
+            quote_char = c
+            i += 1
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start : i + 1]
+        i += 1
+    return None
+
+
 def _parse_json_from_text(text: str, logger_name: str = "LLM") -> dict:
     """
     Извлечь и распарсить JSON из ответа модели (может быть обёрнут в markdown или текст).
+    Обрабатывает префиксы вроде "Python", "```python", обрезанный ответ и т.д.
     """
     if not text or not text.strip():
         raise ValueError(f"{logger_name}: пустой ответ, JSON не найден")
 
     raw = text.strip()
+
+    # Убрать префиксы вида ```python, ```Python, ```json, ``` и "Python" в начале
+    for prefix in (r"^```\s*(?:python|json|Python|JSON)?\s*\n?", r"^(?:Python|python|JSON|json)\s*\n+"):
+        raw = re.sub(prefix, "", raw, flags=re.IGNORECASE)
+    raw = raw.strip()
 
     # Прямой парсинг
     try:
@@ -30,22 +75,30 @@ def _parse_json_from_text(text: str, logger_name: str = "LLM") -> dict:
     except json.JSONDecodeError:
         pass
 
-    # Извлечь из блока ```json ... ```
-    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw)
+    # Извлечь из блока ``` ... ``` (если есть закрывающий)
+    match = re.search(r"```(?:json|python)?\s*([\s\S]*?)\s*```", raw, re.IGNORECASE)
     if match:
         try:
             return json.loads(match.group(1).strip())
         except json.JSONDecodeError:
             pass
 
-    # Найти первый { и последний }
+    # Найти первый { и извлечь объект по парной }
     start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start >= 0 and end > start:
-        try:
-            return json.loads(raw[start:end])
-        except json.JSONDecodeError:
-            pass
+    if start >= 0:
+        extracted = _extract_balanced_brace_json(raw, start)
+        if extracted:
+            try:
+                return json.loads(extracted)
+            except json.JSONDecodeError:
+                pass
+        # запасной вариант: первый { до последнего }
+        end = raw.rfind("}") + 1
+        if end > start:
+            try:
+                return json.loads(raw[start:end])
+            except json.JSONDecodeError:
+                pass
 
     raise ValueError(
         f"{logger_name}: в ответе не найден валидный JSON. "
