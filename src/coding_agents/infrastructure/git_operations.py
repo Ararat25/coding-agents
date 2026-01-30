@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from git import Repo, GitCommandError
+from git import Actor, Repo
 from git.exc import GitError
 
 from coding_agents.config import settings
@@ -52,16 +52,18 @@ class GitOperations(GitOperationsInterface):
             raise
 
     def checkout_branch(self, repo_path: str, branch: str, create: bool = False) -> None:
-        """Переключиться на ветку."""
+        """Переключиться на ветку. Если create=True и ветка уже есть — просто переключаемся."""
         try:
             full_path = self.base_repos_dir / repo_path
             repo = Repo(str(full_path))
 
             if create:
-                # Создаём новую ветку
-                repo.git.checkout("-b", branch)
+                local_branch_names = [h.name for h in repo.heads]
+                if branch in local_branch_names:
+                    repo.git.checkout(branch)
+                else:
+                    repo.git.checkout("-b", branch)
             else:
-                # Переключаемся на существующую
                 repo.git.checkout(branch)
 
             logger.info(f"Переключено на ветку {branch} в {repo_path}")
@@ -143,10 +145,11 @@ class GitOperations(GitOperationsInterface):
 
             # Проверяем есть ли изменения
             if repo.is_dirty() or repo.untracked_files:
-                # Коммитим
+                author = Actor(author_name, author_email)
                 repo.index.commit(
                     message,
-                    author=f"{author_name} <{author_email}>",
+                    author=author,
+                    committer=author,
                 )
                 commit_sha = repo.head.commit.hexsha
                 logger.info(f"Изменения закоммичены в {repo_path}: {commit_sha}")
