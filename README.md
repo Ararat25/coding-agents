@@ -39,14 +39,24 @@
 ```
 
 ## Сервис развернут в облаке и досупен по адресу
-## http://158.160.160.54:80/api/process-issue
+## http://158.160.160.54:80
+
+##
+POST http://158.160.160.54:80/api/process-issue
+```json
+{
+    "repo": "https://github.com/Ararat25/mobile-app-test",
+    "issue_number": 3,
+    "start_iteration": 1
+}
+```
 
 ## Как быстро начать
 
 **Подробная пошаговая инструкция:**
 
 Кратко:
-1. Создай `.env` в корне проекта с `GITHUB_TOKEN` и `OPENAI_API_KEY`.
+1. Создай `.env` в корне проекта с `GITHUB_TOKEN` и `OPENAI_API_KEY` (тестировлась система с YANDEX_API_KEY)
 2. Запусти: `docker-compose build --no-cache && docker-compose up -d`.
 3. Вызови API: `POST http://localhost:8000/api/process-issue` с телом:
    ```json
