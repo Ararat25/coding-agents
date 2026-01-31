@@ -38,9 +38,12 @@
        └─► CHANGES_REQUESTED ──► Code Agent (итерация)
 ```
 
+## Сервис развернут в облаке и досупен по адресу
+## http://158.160.160.54:80/api/process-issue
+
 ## Как быстро начать
 
-**Подробная пошаговая инструкция:** [docs/ИНСТРУКЦИЯ_ЗАПУСКА_И_ИСПОЛЬЗОВАНИЯ.md](docs/ИНСТРУКЦИЯ_ЗАПУСКА_И_ИСПОЛЬЗОВАНИЯ.md)
+**Подробная пошаговая инструкция:**
 
 Кратко:
 1. Создай `.env` в корне проекта с `GITHUB_TOKEN` и `OPENAI_API_KEY`.
@@ -101,7 +104,7 @@ docker-compose up -d
 - `OPENAI_API_KEY` - ключ OpenAI (если используется OpenAI)
 - `YANDEX_API_KEY` - ключ YandexGPT (если используется YandexGPT)
 - `YANDEX_FOLDER_ID` - ID папки Yandex Cloud
-- `OPENAI_BASE_URL` - альтернативный URL API (обход гео-ограничений), см. [docs/ОБХОД_ГЕО_ОГРАНИЧЕНИЙ_OPENAI.md](docs/ОБХОД_ГЕО_ОГРАНИЧЕНИЙ_OPENAI.md)
+- `OPENAI_BASE_URL` - альтернативный URL API (обход гео-ограничений)
 - `HTTP_PROXY` / `HTTPS_PROXY` - прокси для исходящих запросов (обход гео)
 - `MAX_ITERATIONS` - максимальное количество итераций (по умолчанию: 5)
 - `WEBHOOK_SECRET` - секрет для проверки подписи webhook (опционально)
@@ -278,11 +281,3 @@ ruff check .
 black .
 mypy src/
 ```
-
-## Лицензия
-
-MIT
-
-## Авторы
-
-Coding Agents Team
